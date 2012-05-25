@@ -315,8 +315,8 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
                 if (obj != _transformingItem) 
                 {
                     GMGridViewCell *cell = (GMGridViewCell *)obj;
-                    cell.bounds = CGRectMake(0, 0, _itemSize.width, _itemSize.height);
-                    cell.contentView.frame = cell.bounds;
+                //                    cell.bounds = CGRectMake(0, 0, _itemSize.width, _itemSize.height);
+                //    cell.contentView.frame = cell.bounds;
                 }
             }];
         }
@@ -1176,8 +1176,10 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
 {
     GMGridViewCell *cell = [self.dataSource GMGridView:self cellForItemAtIndex:position];
     CGPoint origin = [self.layoutStrategy originForItemAtPosition:position];
-    CGRect frame = CGRectMake(origin.x, origin.y, _itemSize.width, _itemSize.height);
-    
+    //    CGRect frame = CGRectMake(origin.x, origin.y, _itemSize.width, _itemSize.height);
+        CGRect frame = CGRectMake(origin.x, origin.y, cell.frame.size.width, cell.frame.size.height);
+    //CGRect frame = CGRectMake(origin.x, origin.y, 100, 100);
+
     // To make sure the frame is not animated
     [self applyWithoutAnimation:^{
         cell.frame = frame;
@@ -1305,7 +1307,7 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
             {
                 NSInteger index = view.tag - kTagOffset;
                 CGPoint origin = [self.layoutStrategy originForItemAtPosition:index];
-                CGRect newFrame = CGRectMake(origin.x, origin.y, _itemSize.width, _itemSize.height);
+                CGRect newFrame = CGRectMake(origin.x, origin.y, view.frame.size.width, view.frame.size.height);
                 
                 // IF statement added for performance reasons (Time Profiling in instruments)
                 if (!CGRectEqualToRect(newFrame, view.frame)) 
@@ -1541,7 +1543,7 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
     
     GMGridViewCell *cell = [self newItemSubViewForPosition:index];
     CGPoint origin = [self.layoutStrategy originForItemAtPosition:index];
-    cell.frame = CGRectMake(origin.x, origin.y, _itemSize.width, _itemSize.height);
+    cell.frame = CGRectMake(origin.x, origin.y, cell.frame.size.width, cell.frame.size.height);
     cell.alpha = 0;
     [self addSubview:cell];
     
