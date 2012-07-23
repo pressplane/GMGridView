@@ -355,4 +355,9 @@
     }
 }
 
+-(BOOL)canMove
+{
+    return YES;
+}
+
 @end

@@ -39,5 +39,7 @@
 
 /// Override to release custom data before cell is reused.
 - (void)prepareForReuse;
+- (BOOL)canMove;
+- (void)shake:(BOOL)on;
 
 @end

@@ -65,6 +65,7 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
     
     CGPoint _minPossibleContentOffset;
     CGPoint _maxPossibleContentOffset;
+    CGPoint _dragOffset;
     
     // Transforming control vars
     GMGridViewCell *_transformingItem;
@@ -111,7 +112,7 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
 - (GMGridViewCell *)newItemSubViewForPosition:(NSInteger)position;
 - (NSInteger)positionForItemSubview:(GMGridViewCell *)view;
 - (void)setSubviewsCacheAsInvalid;
-- (CGRect)rectForPoint:(CGPoint)point inPaggingMode:(BOOL)pagging;
+- (CGRect)rectForPoint:(CGPoint)point inPagingMode:(BOOL)paging;
 
 // Lazy loading
 - (void)loadRequiredItems;
@@ -152,6 +153,7 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
 
 @synthesize firstPositionLoaded = _firstPositionLoaded;
 @synthesize lastPositionLoaded = _lastPositionLoaded;
+@synthesize animationInProgress;
 
 //////////////////////////////////////////////////////////////
 #pragma mark Constructors and destructor
@@ -348,14 +350,14 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
             [self layoutSubviewsWithAnimation:GMGridViewItemAnimationNone];
         }];
         
-        // Fixing the contentOffset when pagging enabled
+        // Fixing the contentOffset when paging enabled
         
         if (self.pagingEnabled) 
         {
-            [self setContentOffset:[self rectForPoint:self.contentOffset inPaggingMode:YES].origin animated:YES];
+            [self setContentOffset:[self rectForPoint:self.contentOffset inPagingMode:YES].origin animated:YES];
         }
     }
-    else 
+    else if (!animationInProgress)
     {
         [self layoutSubviewsWithAnimation:GMGridViewItemAnimationNone];
     }
@@ -597,17 +599,20 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
         case UIGestureRecognizerStateBegan:
         {            
             _autoScrollActive = YES;
+            _dragOffset = CGPointMake(0, 0);
             [self sortingAutoScrollMovementCheck];
             
             break;
         }
         case UIGestureRecognizerStateChanged:
         {
+            // CCF 07/23/12,
             CGPoint translation = [panGesture translationInView:self];
             CGPoint offset = translation;
             CGPoint locationInScroll = [panGesture locationInView:self];
-            
-            _sortMovingItem.transform = CGAffineTransformMakeTranslation(offset.x, offset.y);
+
+            // _sortMovingItem.transform = CGAffineTransformMakeTranslation(offset.x, offset.y);
+            _sortMovingItem.transform = CGAffineTransformMakeTranslation(offset.x + _dragOffset.x, offset.y);
             [self sortingMoveDidContinueToPoint:locationInScroll];
             
             break;
@@ -626,25 +631,34 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
                                          locationInMainView.y -self.contentOffset.y
         );
         
-        
-        CGFloat threshhold = _itemSize.height;
+        // CCF 07/23/12, changed threshold for auto scroll
+        // CGFloat threshhold = _itemSize.height;
+        CGFloat threshhold = _itemSize.width / 2 ;
         CGPoint offset = self.contentOffset;
         CGPoint locationInScroll = [_sortingPanGesture locationInView:self];
+        CGPoint dragOffset = _dragOffset;
         
-        // Going down
+        // CCF 07/23/12, the comments below "Going ..." were wrong.
+        // Going right
         if (locationInMainView.x + threshhold > self.bounds.size.width) 
         {            
-            offset.x += _itemSize.width / 2;
-            
+            // CCF 07/23/12, changed to scroll by a full page.
+            //offset.x += _itemSize.width / 2;
+            offset.x += 320;
+            dragOffset.x += 320;
+
             if (offset.x > _maxPossibleContentOffset.x) 
             {
                 offset.x = _maxPossibleContentOffset.x;
             }
         }
-        // Going up
+        // Going left
         else if (locationInMainView.x - threshhold <= 0) 
         {            
-            offset.x -= _itemSize.width / 2;
+            // CCF 07/23/12, changed to scroll by a full page.
+            // offset.x -= _itemSize.width / 2;
+            offset.x -= 320;
+            dragOffset.x -= 320;
             
             if (offset.x < _minPossibleContentOffset.x) 
             {
@@ -652,17 +666,17 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
             }
         }
         
-        // Going right
+        // Going down
         if (locationInMainView.y + threshhold > self.bounds.size.height) 
         {            
             offset.y += _itemSize.height / 2;
-            
+
             if (offset.y > _maxPossibleContentOffset.y) 
             {
                 offset.y = _maxPossibleContentOffset.y;
             }
         }
-        // Going left
+        // Going up
         else if (locationInMainView.y - threshhold <= 0) 
         {            
             offset.y -= _itemSize.height / 2;
@@ -680,17 +694,24 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
                                 options:kDefaultAnimationOptions
                              animations:^{
                                  self.contentOffset = offset;
+                                 _dragOffset = dragOffset;
                              }
                              completion:^(BOOL finished){
                                  
                                  self.contentOffset = offset;
-                                 
+                                 _dragOffset = dragOffset;
+
                                  if (_autoScrollActive) 
                                  {
                                      [self sortingMoveDidContinueToPoint:locationInScroll];
                                  }
                                  
-                                 [self sortingAutoScrollMovementCheck];
+                                 // CCF 07/23/12, changed to delay the
+                                 // re-check after paging, so you
+                                 // don't quickly scroll multiple
+                                 // times.
+                                 //[self sortingAutoScrollMovementCheck];
+                                 [self performSelector:@selector(sortingAutoScrollMovementCheck) withObject:nil afterDelay:1.5];
                              }
              ];
         }
@@ -707,6 +728,9 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
     
     GMGridViewCell *item = [self cellForItemAtIndex:position];
     
+    if (![item canMove])
+        return;
+
     [self bringSubviewToFront:item];
     _sortMovingItem = item;
     
@@ -715,7 +739,7 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
     [_sortMovingItem removeFromSuperview];
     _sortMovingItem.frame = frameInMainView;
     [self.mainSuperView addSubview:_sortMovingItem];
-    
+
     _sortFuturePosition = _sortMovingItem.tag - kTagOffset;
     _sortMovingItem.tag = 0;
     
@@ -774,7 +798,8 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
 {
     int position = [self.layoutStrategy itemPositionFromLocation:point];
     int tag = position + kTagOffset;
-    
+    BOOL shouldUpdatePosition = NO;
+
     if (position != GMGV_INVALID_POSITION && position != _sortFuturePosition && position < _numberTotalItems) 
     {
         BOOL positionTaken = NO;
@@ -798,10 +823,11 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
                     {
                         for (UIView *v in [self itemSubviews])
                         {
-                            if ((v.tag == tag || (v.tag < tag && v.tag >= _sortFuturePosition + kTagOffset)) && v != _sortMovingItem ) 
+                            if ((v.tag == tag || (v.tag < tag && v.tag >= _sortFuturePosition + kTagOffset)) && v != _sortMovingItem && [(GMGridViewCell*)v canMove]) 
                             {
                                 v.tag = v.tag - 1;
                                 [self sendSubviewToBack:v];
+                                shouldUpdatePosition = YES;
                             }
                         }
                     }
@@ -809,10 +835,11 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
                     {
                         for (UIView *v in [self itemSubviews])
                         {
-                            if ((v.tag == tag || (v.tag > tag && v.tag <= _sortFuturePosition + kTagOffset)) && v != _sortMovingItem) 
+                            if ((v.tag == tag || (v.tag > tag && v.tag <= _sortFuturePosition + kTagOffset)) && v != _sortMovingItem  && [(GMGridViewCell*)v canMove]) 
                             {
                                 v.tag = v.tag + 1;
                                 [self sendSubviewToBack:v];
+                                shouldUpdatePosition = YES;
                             }
                         }
                     }
@@ -825,10 +852,9 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
                 case GMGridViewStyleSwap:
                 default:
                 {
-                    if (_sortMovingItem) 
+                    GMGridViewCell *v = (GMGridViewCell*) [self cellForItemAtIndex:position];
+                    if (_sortMovingItem && [v canMove]) 
                     {
-                        UIView *v = [self cellForItemAtIndex:position];
-                        
                         v.tag = _sortFuturePosition + kTagOffset;
                         CGPoint origin = [self.layoutStrategy originForItemAtPosition:_sortFuturePosition];
                         
@@ -840,16 +866,19 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
                                          }
                                          completion:nil
                          ];
+                        shouldUpdatePosition = YES;
                     }
                     
-                    [self.sortingDelegate GMGridView:self exchangeItemAtIndex:_sortFuturePosition withItemAtIndex:position];
-                    
+                    if ([v canMove]) 
+                    {
+                        [self.sortingDelegate GMGridView:self exchangeItemAtIndex:_sortFuturePosition withItemAtIndex:position];
+                    }
                     break;
                 }
             }
         }
-        
-        _sortFuturePosition = position;
+        if (shouldUpdatePosition)
+            _sortFuturePosition = position;
     }
 }
 
@@ -1308,7 +1337,6 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
                 NSInteger index = view.tag - kTagOffset;
                 CGPoint origin = [self.layoutStrategy originForItemAtPosition:index];
                 CGRect newFrame = CGRectMake(origin.x, origin.y, view.frame.size.width, view.frame.size.height);
-                
                 // IF statement added for performance reasons (Time Profiling in instruments)
                 if (!CGRectEqualToRect(newFrame, view.frame)) 
                 {
@@ -1335,7 +1363,7 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
     }
 }
 
-- (CGRect)rectForPoint:(CGPoint)point inPaggingMode:(BOOL)pagging
+- (CGRect)rectForPoint:(CGPoint)point inPagingMode:(BOOL)paging
 {
     CGRect targetRect = CGRectZero;
     
@@ -1376,7 +1404,6 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
 //////////////////////////////////////////////////////////////
 #pragma mark loading/destroying items & reusing cells
 //////////////////////////////////////////////////////////////
-
 - (void)loadRequiredItems
 {
     NSRange rangeOfPositions = [self.layoutStrategy rangeOfPositionsInBoundsFromOffset: self.contentOffset];
@@ -1574,7 +1601,7 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
     index = MIN(index, _numberTotalItems);
     
     CGPoint origin = [self.layoutStrategy originForItemAtPosition:index];
-    CGRect targetRect = [self rectForPoint:origin inPaggingMode:self.pagingEnabled];
+    CGRect targetRect = [self rectForPoint:origin inPagingMode:self.pagingEnabled];
     
     if (!self.pagingEnabled)
     {
