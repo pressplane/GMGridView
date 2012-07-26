@@ -772,7 +772,7 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
     
     CGPoint newOrigin = [self.layoutStrategy originForItemAtPosition:_sortFuturePosition];
     CGRect newFrame = CGRectMake(newOrigin.x, newOrigin.y, _itemSize.width, _itemSize.height);
-    
+
     [UIView animateWithDuration:kDefaultAnimationDuration 
                           delay:0
                         options:0
@@ -800,7 +800,8 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
     int tag = position + kTagOffset;
     BOOL shouldUpdatePosition = NO;
 
-    if (position != GMGV_INVALID_POSITION && position != _sortFuturePosition && position < _numberTotalItems) 
+    if (position != GMGV_INVALID_POSITION && position != _sortFuturePosition && position < _numberTotalItems 
+        && [self canMoveItemAtPosition:position] && [self canMoveItemAtPosition:_sortFuturePosition]) 
     {
         BOOL positionTaken = NO;
         
@@ -844,9 +845,12 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
                         }
                     }
                     
-                    [self.sortingDelegate GMGridView:self moveItemAtIndex:_sortFuturePosition toIndex:position];
-                    [self relayoutItemsAnimated:YES];
-                    
+                    if (shouldUpdatePosition)
+                    {
+                        [self.sortingDelegate GMGridView:self moveItemAtIndex:_sortFuturePosition toIndex:position];
+                        [self relayoutItemsAnimated:YES];
+                    }
+
                     break;
                 }
                 case GMGridViewStyleSwap:
@@ -879,6 +883,19 @@ static const UIViewAnimationOptions kDefaultAnimationOptions = UIViewAnimationOp
         }
         if (shouldUpdatePosition)
             _sortFuturePosition = position;
+    }
+}
+
+
+-(BOOL)canMoveItemAtPosition:(int)position
+{
+    if ([self.sortingDelegate respondsToSelector:@selector(GMGridView:canMoveItemAtPosition:)])
+    {
+        return [self.sortingDelegate GMGridView:self canMoveItemAtPosition:position];
+    } 
+    else
+    {
+        return true;
     }
 }
 
